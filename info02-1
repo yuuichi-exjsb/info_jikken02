@@ -1,0 +1,195 @@
+#include "arduinoFFT.h"
+#include <avr/wdt.h>
+ 
+#define SAMPLES 128            //Must be a power of 2
+#define SAMPLING_FREQUENCY 7500 //Hz, must be less than 10000 due to ADC
+
+ 
+
+//PWMで速度調節、前に進みながらみぎまわりするoutputpin1,2とoutputpin3,4の速さを変える
+
+ 
+
+arduinoFFT FFT = arduinoFFT();
+ 
+unsigned int sampling_period_us;
+unsigned long microseconds;
+const int outputPin1 = 13;//11
+const int outputPin2 = 12;//10
+const int outputPin3 = 8;//9
+const int outputPin4 = 7;//6
+const int lpower = 5;
+const int rpower = 3;
+
+ 
+
+void software_reset(){
+  wdt_disable();
+  wdt_enable(WDTO_15MS);
+  while(1){}
+}
+
+ 
+
+void setup() {
+    Serial.begin(115200);//シリアル転送レート
+ 
+    sampling_period_us = round(1000000*(1.0/SAMPLING_FREQUENCY));
+
+ 
+
+    pinMode(outputPin1,OUTPUT);//11,10,9,6をアウトプット
+    pinMode(outputPin2,OUTPUT);
+    pinMode(outputPin3,OUTPUT);
+    pinMode(outputPin4,OUTPUT);
+    pinMode(lpower,OUTPUT);//速度調節
+    pinMode(rpower,OUTPUT);
+}
+ 
+void loop() {
+    double vReal[SAMPLES];
+    double vImag[SAMPLES];
+   
+    /*SAMPLING*/
+    for(int i=0; i<SAMPLES; i++)
+    {
+        microseconds = micros();    //Overflows after around 70 minutes!
+     
+        vReal[i] = analogRead(A0);  //ESP8266の場合は「A0」。普通のArduinoは「0」。//0~5Vの電圧を一定時間感知して配列に格納
+        vImag[i] = 0;
+     
+        while(micros() < (microseconds + sampling_period_us)){
+        }
+    }
+ 
+    /*FFT*/
+    FFT.Windowing(vReal, SAMPLES, FFT_WIN_TYP_HAMMING, FFT_FORWARD);
+    FFT.Compute(vReal, vImag, SAMPLES, FFT_FORWARD);
+    FFT.ComplexToMagnitude(vReal, vImag, SAMPLES);
+    double peak = FFT.MajorPeak(vReal, SAMPLES, SAMPLING_FREQUENCY);
+ 
+    /*PRINT RESULTS*/
+    Serial.println(peak);     //Print out what frequency is the most dominant.
+ 
+    
+
+ 
+
+    //reset
+    /**
+    if(microseconds % 1000 == 0){
+      wdt_reset();
+    }
+*/
+
+ 
+
+ 
+
+      if(peak > 1900 && peak < 2000){
+    //if(peak < 2000 && peak > 3000){//後退 2100ぐらいがいい
+      //delay(500);
+      analogWrite(lpower,150);  //左のTA7291の4番ピンにつなぐ
+      digitalWrite(outputPin1,HIGH);  //左
+      digitalWrite(outputPin2,LOW);
+
+ 
+
+      analogWrite(rpower,150);  //右のTA7291の4番ピンにつなぐ
+      digitalWrite(outputPin3,HIGH); //右
+      digitalWrite(outputPin4,LOW);
+      //delay(100);
+      Serial.print("a");
+      /**
+      analogWrite(lpower,0);
+      digitalWrite(outputPin1,LOW);
+      digitalWrite(outputPin2,LOW);
+      analogWrite(rpower,0);
+      digitalWrite(outputPin3,LOW);
+      digitalWrite(outputPin4,LOW);
+      */
+    }
+    else if(peak >2200 && peak < 2300){ 
+   //else if(peak > 2500 && peak < 3000){  //左回転 2600ぐらいがいい
+      //delay(500);
+      analogWrite(lpower,100);  //左のTA7291の4番ピンにつなぐ
+      digitalWrite(outputPin1,HIGH);  //左
+      digitalWrite(outputPin2,LOW);
+
+ 
+
+      analogWrite(rpower,150);  //右のTA7291の4番ピンにつなぐ
+      digitalWrite(outputPin3,LOW); //右
+      digitalWrite(outputPin4,HIGH);
+      
+      //delay(100);
+      Serial.print("b");
+    }
+    else if(peak > 2500 && peak < 2600){ 
+    //else if(peak > 3000 && peak < 3500){  //右回転 3100ぐらいがいい
+      //delay(500);
+      analogWrite(lpower,150);  //左のTA7291の4番ピンにつなぐ
+      digitalWrite(outputPin1,LOW);  //左
+      digitalWrite(outputPin2,HIGH);
+
+ 
+
+      analogWrite(rpower,100);  //右のTA7291の4番ピンにつなぐ
+      digitalWrite(outputPin3,HIGH); //右  //lowにするとはやくなる
+      digitalWrite(outputPin4,LOW);        //highにするとはやくなる
+      //delay(100);
+      Serial.print("c");
+    }
+    
+    else if(peak > 2700 && peak < 2900){  //直進 3600ぐらいがいい
+      //delay(500);
+      analogWrite(lpower,150);  //左のTA7291の4番ピンにつなぐ
+      digitalWrite(outputPin1,LOW);  //左  
+      digitalWrite(outputPin2,HIGH);       
+
+ 
+
+      analogWrite(rpower,150);  //右のTA7291の4番ピンにつなぐ
+      digitalWrite(outputPin3,LOW); //右
+      digitalWrite(outputPin4,HIGH);
+      
+      //delay(100);
+      Serial.print("d");
+    }
+    else{
+      analogWrite(lpower,150);  //左のTA7291の4番ピンにつなぐ
+      digitalWrite(outputPin1,LOW);  //左
+      digitalWrite(outputPin2,LOW);
+
+ 
+
+      analogWrite(rpower,150);  //右のTA7291の4番ピンにつなぐ
+      digitalWrite(outputPin3,LOW); //右
+      digitalWrite(outputPin4,LOW);
+      //delay(100);
+      Serial.print("x");
+      /**
+      analogWrite(lpower,0);
+      digitalWrite(outputPin1,LOW);
+      digitalWrite(outputPin2,LOW);
+      analogWrite(rpower,0);
+      digitalWrite(outputPin3,LOW);
+      digitalWrite(outputPin4,LOW);
+      */
+    } 
+
+ 
+
+    //for(int i=2; i<(SAMPLES/2); i++)
+    //{
+        /*View all these three lines in serial terminal to see which frequencies has which amplitudes*/
+         
+        //Serial.print((i * 1.0 * SAMPLING_FREQUENCY) / SAMPLES, 1);
+        //Serial.print(" ");
+        //Serial.println(vReal[i], 1);    //View only this line in serial plotter to visualize the bins
+    //}
+ 
+    delay(1);  //Repeat the process every second OR:
+    
+    //while(1);       //ESPだと無限ループがエラーになるので注意
+}
